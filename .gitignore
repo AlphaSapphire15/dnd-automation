@@ -141,6 +141,8 @@ cython_debug/
 
 # Sensitive configuration - IMPORTANT!
 config.env
+client_secret.json
+token.json
 
 # Generated images
 images/ 
