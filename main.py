@@ -4,10 +4,10 @@ import os
 import pathlib
 import re
 import textwrap
-import time # Added for potential delays/retries
 from datetime import datetime
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw, ImageFont # Import ImageDraw and ImageFont from Pillow
+import time
 
 # --- Google Drive Imports ---
 import pickle
@@ -31,28 +31,33 @@ TOKEN_PATH = 'token.json'
 CREDS_PATH = 'client_secret.json'
 # --- End Google Drive Setup ---
 
-# Global check for key (used by functions before main)
 if not OPENAI_API_KEY:
-    print("⚠️  No OPENAI_API_KEY found in config.env – using placeholders for API calls.")
+    print("⚠️  No OPENAI_API_KEY found in config.env – using placeholders.")
 else:
     try:
         import openai
         openai.api_key = OPENAI_API_KEY
-        print("✅ OpenAI API key loaded globally.")
+        print("✅ OpenAI API key loaded.")
     except ImportError:
         print("⚠️ OpenAI library not installed. Run 'py -m pip install openai'")
         OPENAI_API_KEY = None # Ensure key is treated as missing
+
+if not GOOGLE_DRIVE_FOLDER_ID:
+    print("⚠️  No GOOGLE_DRIVE_FOLDER_ID found in config.env – Google Drive upload disabled.")
+
 
 # ------------- 2. Define Your Art Style Prompt Components (REMOVED GLOBAL ART_STYLE) -------------
 # The art style description will be combined dynamically later
 
 # ------------- 3. Function to Generate Slide Text -------------
-def generate_slides_text(theme: str) -> str | None:
-    """Calls OpenAI Chat API to generate slide text descriptions, adapting to theme type."""
+def generate_slides_text(theme: str) -> str:
+    """Calls OpenAI Chat API to generate the 13 slide text descriptions, adapting to theme type."""
     if not OPENAI_API_KEY:
-        print("ℹ️ Skipping text generation (no API key).")
-        # Cannot generate placeholders without knowing theme type, return None
-        return None
+        print("ℹ️ Skipping text generation (no API key). Returning placeholder markdown.")
+        placeholder_md = "### 🏷️ **Slide 1 – Title Card**\\n**visual:** Placeholder visual for title\\n**The slide should have this exact text (don't add any other text):**\\nPlaceholder Title\\n*Placeholder subtitle*\\n\\n---\\n\\n"
+        for i, month in enumerate(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], start=2):
+            placeholder_md += f"### 💀 **Slide {i} – {month}**\\n**visual:** Placeholder visual for {month}\\n**The slide should have this exact text (don't add any other text):**\\n**{month} – Placeholder Item**\\n*Placeholder detail*\\n\\n---\\n\\n"
+        return placeholder_md
 
     print(f"📝 Requesting slide text generation for theme: '{theme}'...")
 
@@ -82,58 +87,66 @@ def generate_slides_text(theme: str) -> str | None:
         item_type_singular = "Concept"
         specific_guideline = f"Slides 2-13 should feature 12 unique examples, items, or concepts directly related to the theme '{theme}'. DO NOT use months."
 
-
-    # Base prompt structure for instructions and formatting
-    # Updated to reflect singular/plural item types
+    # Base prompt structure - DEFINED *AFTER* variables are set.
+    # UPDATED AGAIN: Focus on forcing Title Structure and Higher Creativity
     base_instructions = f"""
-You are a creative TTRPG content writer specializing in quirky and humorous D&D-themed concepts. You MUST generate content in the EXACT format requested below.
+You are an expert TTRPG content writer known for exceptionally creative, specific, and genuinely funny D&D-themed TikTok concepts. Your primary goal is to generate highly engaging and shareable slide content. Adhere strictly to the format below.
 
 Theme: "{theme}"
 
-Generate a {slide_count_target}-slide TikTok carousel series based on this theme.
-Slide 1 is the title card.
-{specific_guideline}
+Generate a {slide_count_target}-slide TikTok carousel series for this theme.
+Slide 1 MUST be a captivating Title Card setting the scene.
+{specific_guideline} # This covers slides 2 onwards based on theme type
 
-**IMPORTANT GUIDELINES:**
-*   **Avoid Clichés:** Do NOT rely on common stereotypes or generic themes (especially avoid holiday/seasonal clichés unless highly relevant and unique to the core theme).
-*   **Focus on Theme:** The primary inspiration MUST be a unique, specific, and ideally humorous twist on the main theme: "{theme}".
-*   **Be Creative & Specific:** Aim for unexpected combinations and subvert fantasy tropes in a D&D context.
-*   **Output Format:** Strictly follow the slide format specified below for all {slide_count_target} slides.
+**CRITICAL GUIDELINES FOR *EVERY* SLIDE (INCLUDING SLIDE 1):**
+*   **EXTREME Specificity & Creativity:** Avoid generics AT ALL COSTS. Concepts MUST be hyper-specific, visually distinct, and subvert expectations (e.g., 'Barbarian as a Pop-Up Survival Guide', 'Druid as a Living Herbology Atlas that leaves soil everywhere', 'Warlock Pact Tome that whispers'). Think detailed micro-scenes or bizarre fusions.
+*   **Mandatory Humor:** The tone MUST be quirky, witty, and genuinely funny, playing on D&D tropes and the theme.
+*   **Strict Formatting:** Output *only* in the format below. No extra conversation, explanations, or deviations.
 
-For **each slide**, output EXACTLY like this, including the markdown and specific phrasing:
+**OUTPUT FORMAT FOR EACH SLIDE (MANDATORY, INCLUDING SLIDE 1):**
 
 ### 🏷️ **Slide [Number] – [{item_type_singular}]**
-**visual:** (One sentence describing a unique retro-anime illustration appropriate for the slide's specific content. Avoid repeating the exact same character description across multiple slides unless contextually necessary.)
+**visual:** (A *highly detailed*, one-sentence description of a unique retro-anime illustration capturing the specific concept below. Be vivid, specific, and avoid repeating visual elements unless essential.)
 **The slide should have this exact text (don't add any other text):**
-**[{item_type_singular} Name/Title]**
-*[Witty/Funny Subtitle Related to Concept]*
+**[{item_type_singular} Name] – [Specific, Creative Concept Title]**
+*Genuinely Funny/Witty Subtitle Directly Related to the Title Concept*
 
 ---
 
-Do not add extra explanations or conversational text.
+**Example of CORRECT Title/Subtitle format & Quality (Do not use this theme):**
+**Barbarian – Pop-Up Survival Guide**
+*Every page punches you in the face.*
+
+**Example 2:**
+**Druid – Living Herbology Atlas**
+*Leaves leaf. Also leaves soil on furniture.*
+
+**REMINDER: For *every* slide (1 through {slide_count_target}), you MUST include the line `**The slide should have this exact text (don't add any other text):**` followed by the two lines of text (Bold Title, Italic Subtitle) as shown above.**
+**IMPORTANT: The bold Title Line MUST follow the format '[{item_type_singular} Name] – [Specific, Creative Concept Title]'.** 
+**The italicized Subtitle Line (using * *) is MANDATORY and must be witty/funny. Do not include square brackets `[` `]` in the subtitle output.**
+**DO NOT DEVIATE FROM THIS TWO-LINE TEXT STRUCTURE FOR ANY SLIDE.**
 """
 
-    chat_prompt_content = base_instructions # Already includes theme via f-string in base
+    chat_prompt_content = base_instructions # Use the fully formatted base instructions
     # --- End Prompt Structure Logic ---
 
     try:
         resp = openai.chat.completions.create(
-            model="gpt-4o", # Using gpt-4o as requested
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": f"You are a creative writer generating TikTok slide content for {slide_count_target} slides following a strict template and specific creative guidelines."},
+                {"role": "system", "content": "You are a creative writer generating TikTok slide content following a strict template and specific creative guidelines."},
                 {"role": "user", "content": chat_prompt_content}
             ],
-            temperature=0.9, # Increased temperature
+            temperature=0.9,
         )
         generated_text = resp.choices[0].message.content
         print("✅ Text generation complete.")
-        # Basic validation: Check if it looks like markdown segments are present
-        if "---" not in generated_text or "visual:" not in generated_text:
-             print("⚠️ Warning: Generated text format looks potentially incorrect.")
         return generated_text
     except Exception as e:
         print(f"⚠️ Text generation failed: {e}")
-        return None # Indicate failure
+        print("ℹ️ Returning placeholder markdown due to error.")
+        return generate_slides_text(theme) # Fallback still uses month placeholders
+
 
 # ------------- 4. Function to Parse Generated Text -------------
 def parse_slides(md_block: str, expected_slides: int) -> list[dict]:
@@ -145,30 +158,35 @@ def parse_slides(md_block: str, expected_slides: int) -> list[dict]:
 
     # Regex to find the visual description within a chunk
     visual_pattern = re.compile(r"\*\*visual:\*\*\s*(.*)", re.IGNORECASE)
+    # REMOVED: Regex to find the exact slide text block (as the model isn't consistent)
+    # text_pattern = re.compile(r"\*\*The slide should have this exact text.*?\*\*\s*\n?(.*)", re.IGNORECASE | re.DOTALL)
 
     for i, chunk in enumerate(chunks):
-        if i >= expected_slides: # Stop if we somehow find more chunks than expected
-            print(f"⚠️ Found more than {expected_slides} chunks, stopping processing extra chunks.")
+        if i >= expected_slides: # Stop if we somehow find more than expected slides
+            print(f"⚠️ Found more than {expected_slides} chunks, stopping at {expected_slides}.")
             break
 
         visual_match = visual_pattern.search(chunk)
+        # REMOVED: text_match = text_pattern.search(chunk)
+
         if not visual_match:
             print(f"⚠️ Could not find '**visual:**' in chunk {i+1}. Skipping.")
             continue
+        # REMOVED: Check for text_match
 
         visual_prompt = visual_match.group(1).strip()
 
         # Assume the text *after* the visual line is the slide text
+        # Find the end position of the visual match to split the chunk
         text_start_index = visual_match.end()
         slide_text_block = chunk[text_start_index:].strip()
 
         # Clean up potential leading markdown/newlines if the model format varies slightly
-        # This now looks for the specific instruction line OR the first bold line as the start
-        slide_text_block = re.sub(r"^(\s*\*\*The slide should have.*?\*\*\s*\n?)?", "", slide_text_block).strip()
+        slide_text_block = re.sub(r"^\s*\*\*.*?\*\*\s*\n?", "", slide_text_block).strip()
 
-        # Determine title/concept (looks for the first bold text after 'Slide X – ')
-        title_match = re.search(r"Slide \d+ – \*\*(.*?)\*\*", chunk)
-        slide_title = title_match.group(1).strip() if title_match else f"Item_{i+1}" # Fallback title
+        # Determine month/title (using a simpler pattern that looks for the first bold text after 'Slide X – ')
+        month_title_match = re.search(r"Slide \d+ – \*\*(.*?)\*\*", chunk)
+        month_or_title = month_title_match.group(1).strip() if month_title_match else f"Slide_{i+1}"
 
         # Ensure we actually got some slide text
         if not slide_text_block:
@@ -177,63 +195,61 @@ def parse_slides(md_block: str, expected_slides: int) -> list[dict]:
 
         slides.append({
             "slide_number": i + 1,
-            "month_or_title": slide_title, # Use the parsed title
+            "month_or_title": month_or_title,
             "visual_prompt": visual_prompt,
             "slide_text": slide_text_block
         })
 
-    parsed_count = len(slides)
-    print(f"✅ Parsed {parsed_count} slides.")
-    if parsed_count != expected_slides:
-        print(f"⚠️ Warning: Expected {expected_slides} slides, but parsed {parsed_count}. Check generated text format.")
+    print(f"✅ Parsed {len(slides)} slides.")
+    if len(slides) != expected_slides:
+        print(f"⚠️ Warning: Expected {expected_slides} slides, but parsed {len(slides)}. Check generated text format.")
 
     return slides
 
 
 # ------------- 5. Function to Generate Image -------------
-def make_image(theme: str, visual: str, slide_text: str, out_name_base: str) -> tuple[str | None, str | None]:
-    """Calls OpenAI Image API for TWO images, saves them, returns tuple of paths (path1, path2) or (None, None)."""
+# Updated to accept slide_text and construct the full prompt dynamically
+def make_image(theme: str, visual: str, slide_text: str, out_name: str) -> str | None:
+    """Calls OpenAI Image API to generate an image with specific text, saves it, returns the path or None on failure."""
     img_dir = pathlib.Path("images")
     img_dir.mkdir(exist_ok=True)
     # Define paths for both versions
-    img_path_v1 = img_dir / f"{out_name_base}_v1.png"
-    img_path_v2 = img_dir / f"{out_name_base}_v2.png"
+    img_path_v1 = img_dir / f"{out_name}_v1.png"
+    img_path_v2 = img_dir / f"{out_name}_v2.png"
 
     # --- Placeholder Generation (Generates two placeholders) ---
     if not OPENAI_API_KEY:
-        print(f"ℹ️ Creating placeholder images for: {out_name_base}")
-        placeholder_paths = []
-        for i, img_path in enumerate([img_path_v1, img_path_v2]):
+        print(f"ℹ️ Creating placeholder image: {img_path_v1}")
+        try:
+            img = Image.new("RGB", (1024, 1536), "#AAAAAA") # Use the target size
+            draw = ImageDraw.Draw(img)
             try:
-                img = Image.new("RGB", (1024, 1536), "#AAAAAA")
-                draw = ImageDraw.Draw(img)
-                try:
-                    font = ImageFont.truetype("arial.ttf", size=60)
-                except IOError:
-                    font = ImageFont.load_default(size=60)
-                lines = textwrap.wrap(slide_text, width=30)
-                text_height_total = sum(font.getbbox(line)[3] - font.getbbox(line)[1] for line in lines)
-                y_start = (img.height - text_height_total) / 2
-                for line in lines:
-                     bbox = font.getbbox(line)
-                     text_width = bbox[2] - bbox[0]
-                     text_height = bbox[3] - bbox[1]
-                     x = (img.width - text_width) / 2
-                     draw.text((x, y_start), line, font=font, fill="#000000")
-                     y_start += text_height * 1.2
-                img.save(img_path, "PNG")
-                print(f"   -> ✅ Saved placeholder {i+1}: {img_path}")
-                placeholder_paths.append(str(img_path))
-            except Exception as e:
-                print(f"   -> ⚠️ Failed to create placeholder {i+1}: {e}")
-                placeholder_paths.append(None)
-        # Return tuple, ensuring it always has length 2
-        path1 = placeholder_paths[0] if len(placeholder_paths) > 0 else None
-        path2 = placeholder_paths[1] if len(placeholder_paths) > 1 else None
-        return path1, path2
-    # --- End Placeholder Generation ---
+                font = ImageFont.truetype("arial.ttf", size=60)
+            except IOError:
+                font = ImageFont.load_default(size=60) # Fallback font
+            lines = textwrap.wrap(slide_text, width=30)
+            text_height_total = sum(font.getbbox(line)[3] - font.getbbox(line)[1] for line in lines)
+            y_start = (img.height - text_height_total) / 2
+            for line in lines:
+                 bbox = font.getbbox(line)
+                 text_width = bbox[2] - bbox[0]
+                 text_height = bbox[3] - bbox[1]
+                 x = (img.width - text_width) / 2
+                 draw.text((x, y_start), line, font=font, fill="#000000")
+                 y_start += text_height * 1.2
+            img.save(img_path_v1, "PNG")
+            print(f"✅ Saved placeholder image with text: {img_path_v1}")
+            return str(img_path_v1)
+        except Exception as e:
+            print(f"⚠️ Failed to create placeholder image with text: {e}")
+            try:
+                 Image.new("RGB", (300, 450), "#AAAAAA").save(img_path_v1, "PNG")
+                 return str(img_path_v1) # Return path even for basic placeholder
+            except Exception as e_inner:
+                 print(f"⚠️ Failed to create basic placeholder image: {e_inner}")
+                 return None # Indicate failure
 
-    print(f"🖼️ Requesting 2 image generations for: {out_name_base}...")
+    print(f"🖼️ Requesting 2 image generations for: {out_name}...")
 
     # Construct the full, unique prompt for the image generator
     full_image_prompt = f"""
@@ -268,7 +284,7 @@ The slide should have this exact text (don't add any other text):
     generated_paths = []
     try:
         resp = openai.images.generate(
-            model="gpt-image-1",
+            model="gpt-image-1", # Reverted back to gpt-image-1 as requested
             prompt=full_image_prompt,
             n=2, # Generate two images
             size="1024x1536",
@@ -293,14 +309,14 @@ The slide should have this exact text (don't add any other text):
          print(f"   Problematic visual prompt part: '{visual}'")
          print("   Creating placeholder images instead.")
          # Attempt to create 2 placeholders on bad request
-         return make_image(theme, visual, slide_text, out_name_base) # Re-call self in placeholder mode
+         return make_image(theme, visual, slide_text, out_name) # Re-call self in placeholder mode
 
     except Exception as e:
         print(f"⚠️ Image generation failed: {e}")
         print(f"   Visual prompt part: '{visual}'")
         print("   Creating placeholder images instead.")
         # Attempt to create 2 placeholders on other errors
-        return make_image(theme, visual, slide_text, out_name_base) # Re-call self in placeholder mode
+        return make_image(theme, visual, slide_text, out_name) # Re-call self in placeholder mode
 
     # Return tuple, ensuring length 2
     path1 = generated_paths[0] if len(generated_paths) > 0 else None
@@ -309,12 +325,16 @@ The slide should have this exact text (don't add any other text):
 
 
 # ------------- 6. Google Drive Functions -------------
+
 def get_drive_service():
     """Gets authenticated Google Drive service object."""
     creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first time.
     if os.path.exists(TOKEN_PATH):
         with open(TOKEN_PATH, 'rb') as token:
             creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -322,69 +342,78 @@ def get_drive_service():
             except Exception as e:
                 print(f"⚠️ Failed to refresh Google token: {e}. Deleting token and re-authenticating.")
                 os.remove(TOKEN_PATH)
-                creds = None
-        if not creds:
+                creds = None # Force re-authentication
+        if not creds: # Re-authenticate if refresh failed or no token existed
              if not os.path.exists(CREDS_PATH):
                  print(f"❌ Google credentials file not found: {CREDS_PATH}")
                  print("   Please download it from Google Cloud Console and place it here.")
                  return None
              flow = InstalledAppFlow.from_client_secrets_file(CREDS_PATH, SCOPES)
-             creds = flow.run_local_server(port=0)
+             # Run flow using a local server to handle the redirect
+             creds = flow.run_local_server(port=0) # Use port=0 to find a free port
+        # Save the credentials for the next run
         with open(TOKEN_PATH, 'wb') as token:
             pickle.dump(creds, token)
+
     try:
         service = build('drive', 'v3', credentials=creds)
         print("✅ Google Drive API service created.")
         return service
     except HttpError as error:
-        print(f"❌ An error occurred creating Google Drive service: {error}")
+        print(f'❌ An error occurred creating Google Drive service: {error}')
         return None
     except Exception as e:
-        print(f"❌ An unexpected error occurred creating Google Drive service: {e}")
+        print(f'❌ An unexpected error occurred creating Google Drive service: {e}')
         return None
 
 def find_or_create_folder(service, folder_name, parent_folder_id):
     """Finds a folder by name within a parent folder, or creates it if not found."""
     if not service:
         return None
-    # Sanitize folder name slightly for Drive API (avoiding some problematic chars)
-    safe_folder_name = re.sub(r'[\\"]', '', folder_name) # Remove backslash and double quote
-    if not safe_folder_name:
-         print(f"⚠️ Invalid theme '{folder_name}' resulted in empty safe name. Skipping folder creation.")
-         return None
     try:
-        query = f"name='{safe_folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
+        # Escape single quotes for the query string itself
+        # Use double backslash to ensure a literal backslash is in the query string
+        escaped_folder_name = folder_name.replace("'", "\\'")
+        # Also remove problematic characters for the folder name itself if creating
+        safe_folder_name_for_creation = re.sub(r'[\\/"]', '', folder_name)
+
+        # Search for the folder
+        query = f"name='{escaped_folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
         response = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
         folders = response.get('files', [])
+
         if folders:
             folder_id = folders[0].get('id')
-            print(f"📁 Found existing folder: '{safe_folder_name}' (ID: {folder_id})")
+            print(f"📁 Found existing folder: '{folder_name}' (ID: {folder_id})")
             return folder_id
         else:
-            print(f"📁 Folder '{safe_folder_name}' not found, creating...")
+            # Create the folder
+            print(f"📁 Folder '{folder_name}' not found, creating...")
             file_metadata = {
-                'name': safe_folder_name,
+                'name': safe_folder_name_for_creation,
                 'mimeType': 'application/vnd.google-apps.folder',
                 'parents': [parent_folder_id]
             }
             folder = service.files().create(body=file_metadata, fields='id').execute()
             folder_id = folder.get('id')
-            print(f"✅ Created folder: '{safe_folder_name}' (ID: {folder_id})")
+            print(f"✅ Created folder: '{folder_name}' (ID: {folder_id})")
             return folder_id
     except HttpError as error:
-        print(f"❌ An error occurred finding/creating folder '{safe_folder_name}': {error}")
+        print(f"❌ An error occurred finding/creating folder '{folder_name}': {error}")
         return None
     except Exception as e:
-        print(f"❌ An unexpected error occurred finding/creating folder '{safe_folder_name}': {e}")
+        print(f"❌ An unexpected error occurred finding/creating folder '{folder_name}': {e}")
         return None
+
 
 def upload_image_to_drive(service, local_image_path, target_folder_id):
     """Uploads a locally generated image to the specified Google Drive folder."""
+    if not local_image_path: # Check if path is None or empty FIRST
+        print(f"   -> Skipping Google Drive upload (invalid local image path provided: {local_image_path}).")
+        return
+
     if not service or not target_folder_id:
         print("   -> Skipping Google Drive upload (service or folder ID missing).")
-        return
-    if not local_image_path: # Check if path is None or empty
-        print(f"   -> Skipping Google Drive upload (invalid local image path).")
         return
 
     file_path = pathlib.Path(local_image_path)
@@ -392,25 +421,20 @@ def upload_image_to_drive(service, local_image_path, target_folder_id):
         print(f"   -> Skipping Google Drive upload ('{local_image_path}' not found).")
         return
 
-    print(f"   -> Uploading '{file_path.name}' to Google Drive...")
     try:
         file_metadata = {
             'name': file_path.name,
             'parents': [target_folder_id]
         }
-        media = MediaFileUpload(str(file_path), mimetype='image/png', resumable=True)
-        request = service.files().create(body=file_metadata, media_body=media, fields='id')
-        response = None
-        while response is None:
-            status, response = request.next_chunk()
-            if status:
-                print(f"      Uploaded {int(status.progress() * 100)}%")
-        print(f"   -> ✅ Successfully uploaded '{file_path.name}' (ID: {response.get('id')})")
-
+        media = MediaFileUpload(str(file_path), mimetype='image/png')
+        file = service.files().create(body=file_metadata,
+                                      media_body=media,
+                                      fields='id').execute()
+        print(f"   -> ✅ Successfully uploaded '{file_path.name}' to Google Drive (ID: {file.get('id')})")
     except HttpError as error:
-        print(f"   -> ❌ An error occurred uploading '{file_path.name}': {error}")
+        print(f"   -> ❌ An error occurred uploading '{file_path.name}' to Google Drive: {error}")
     except Exception as e:
-         print(f"   -> ❌ An unexpected error occurred uploading '{file_path.name}': {e}")
+         print(f"   -> ❌ An unexpected error occurred uploading '{file_path.name}' to Google Drive: {e}")
 
 # ------------- 7. Main Execution Logic (Batch Processing) ------------- # Renumbered
 PROCESSED_THEMES_FILE = "processed_themes.txt"
@@ -509,7 +533,7 @@ def main():
         print("-" * 30)
     else:
          print("ℹ️ Google Drive Folder ID not set in config.env. Skipping all uploads.")
-         print("-" * 30)
+    print("-" * 30)
 
     # --- Process Each Selected Theme --- 
     processed_in_this_run_count = 0
@@ -518,7 +542,7 @@ def main():
         theme_successfully_processed = False # Flag to track success for this theme
 
         # Sanitize theme name for use in filenames
-        safe_theme_name = re.sub(r'[\\\\/*?:\"<>|]', "", theme).replace(" ", "_")
+        safe_theme_name = re.sub(r'[\\/*?:"<>|]', "", theme).replace(" ", "_")
         if len(safe_theme_name) > 50:
              safe_theme_name = safe_theme_name[:50]
 
@@ -534,20 +558,27 @@ def main():
             markdown_block = generate_slides_text(theme)
             if not markdown_block:
                  print("❌ Text generation skipped or failed. Cannot proceed with this theme.")
-                 continue
+                 continue # Move to the next theme in the loop
 
             print("\n--- Raw Generated Markdown Block ---")
             print(markdown_block[:1000] + "... (truncated)" if len(markdown_block) > 1000 else markdown_block)
             print("--- End Raw Markdown Block ---\n")
 
-            # Determine expected slides based on theme type (again, for parsing check)
-            expected_slides = 14 if ("class" in theme.lower() or "classes" in theme.lower()) else 13
+            # Determine expected slides based on theme type (matching logic in generator)
+            theme_lower_main = theme.lower() # Use a different variable name to avoid scope issues
+            if "month" in theme_lower_main or "birth month" in theme_lower_main:
+                expected_slides = 13
+            elif "class" in theme_lower_main or "classes" in theme_lower_main:
+                expected_slides = 14
+            else:
+                expected_slides = 13
+            # expected_slides = 14 if ("class" in theme.lower() or "classes" in theme.lower()) else 13 # Old simpler check
 
             # 2. Parse the text block into structured slide data
             parsed_slide_data = parse_slides(markdown_block, expected_slides)
             if not parsed_slide_data:
                 print("❌ Failed to parse slides from generated text. Cannot proceed with this theme.")
-                continue
+                continue # Move to the next theme
 
             # 3. Generate images (2 per slide), upload to Drive, and collect data for CSV
             final_slide_rows = []
@@ -560,8 +591,12 @@ def main():
                 visual_prompt = slide['visual_prompt']
                 slide_text = slide['slide_text']
 
+                # --- Debug Print ---
+                # print(f"   -> Text for image prompt: {slide_text}") # Optional: Uncomment for debugging
+                # --- End Debug ---
+
                 # Generate filename base (without _v1/_v2)
-                safe_slide_title = re.sub(r'[\\\\/*?:\"<>|]', "", slide_title).replace(" ", "_")
+                safe_slide_title = re.sub(r'[^\\/*?:"<>|]', "", slide_title).replace(" ", "_")
                 filename_base = f"{slide_num:02d}_{safe_slide_title}"
 
                 # Generate two image versions
@@ -573,6 +608,8 @@ def main():
                 if drive_service and theme_folder_id:
                     upload_image_to_drive(drive_service, local_image_path_v1, theme_folder_id)
                     upload_image_to_drive(drive_service, local_image_path_v2, theme_folder_id)
+                elif not drive_service or not theme_folder_id:
+                    print(f"   -> Skipping Google Drive upload for slide {slide_num} (service/folder missing).")
 
                 # Add data to list for CSV writing
                 final_slide_rows.append({
@@ -585,7 +622,7 @@ def main():
                     "image_file_v2": local_image_path_v2 if local_image_path_v2 else "GENERATION_FAILED"
                 })
                 print("-" * 10)
-                time.sleep(1)
+                time.sleep(1) # Add a small delay between slides
 
             print("✅ Image generation & upload loop complete for theme.")
             print("-" * 30)
@@ -633,4 +670,4 @@ def main():
 
 # ------------- 8. Run the main function ------------- # Renumbered
 if __name__ == "__main__":
-    main()
+    main() 

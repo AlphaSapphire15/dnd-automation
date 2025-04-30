@@ -145,4 +145,18 @@ client_secret.json
 token.json
 
 # Generated images
-images/ 
+images/
+
+# Generated CSV files
+slides_*.csv
+processed_themes.txt
+
+# VS Code settings
+.vscode/
+
+# IDE files
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db 
